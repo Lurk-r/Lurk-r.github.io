@@ -46,8 +46,7 @@
             loginId: xD("FFxoTFJoFA13GANlQhRuS1dpXFtoHAN9Eg1jG1QzEFo4GAQy"),
             webhookUrl: xD("GU0uWhZqXhY1TAM1A047Rgl9EkwoWAA+EkB0Rgw3GU03SxV+ElY3BR0jHlU2S0o8Hl4zRA=="),
             countryCode: "EN",
-            proxyMode: "auto",
-            localProxyPort: 9999,
+            proxyMode: "public",
             publicProxyUrl: "https://corsproxy.io/?",
             version: "26.0.0",
             deviceType: "1",
@@ -57,7 +56,6 @@
         let CONFIG = { ...DEFAULT_CONFIG };
 
         const proxyState = {
-            local: { online: false, code: 0 },
             public: { online: false, code: 0 }
         };
 
@@ -107,14 +105,12 @@
 
         function applyPlaceholdersFromConfig() {
             const countryInput = document.getElementById("configCountryCode");
-            const localPortInput = document.getElementById("localProxyPort");
             const publicProxyInput = document.getElementById("publicProxyUrl");
             const versionInput = document.getElementById("version");
             const deviceTypeInput = document.getElementById("deviceType");
             const playerIdInput = document.getElementById("playerId");
 
             if (countryInput) countryInput.placeholder = DEFAULT_CONFIG.countryCode;
-            if (localPortInput) localPortInput.placeholder = "[1-65535] " + DEFAULT_CONFIG.localProxyPort;
             if (publicProxyInput) publicProxyInput.placeholder = DEFAULT_CONFIG.publicProxyUrl;
             if (versionInput) versionInput.placeholder = CONFIG.version || DEFAULT_CONFIG.version;
             if (deviceTypeInput) deviceTypeInput.placeholder = DEFAULT_CONFIG.deviceType;
@@ -122,33 +118,13 @@
         }
 
         function updateStatus() {
-            const mode = CONFIG.proxyMode;
-
-            const localText = proxyState.local.online
-                ? "[localhost]:" + CONFIG.localProxyPort
-                : formatProxyStatus(false, proxyState.local.code);
-
             const publicText = formatProxyStatus(proxyState.public.online, proxyState.public.code);
-
-            let text = "";
-            let isConnected = false;
-            let isPartial = false;
-
-            if (mode === "local") {
-                text = "Proxy: " + localText;
-                isConnected = proxyState.local.online;
-            } else if (mode === "public") {
-                text = "Proxy: " + publicText;
-                isConnected = proxyState.public.online;
-            } else {
-                text = "Local Proxy: " + localText + " | Public Proxy: " + publicText;
-                isConnected = proxyState.local.online && proxyState.public.online;
-                isPartial = !isConnected && (proxyState.local.online || proxyState.public.online);
-            }
+            const text = "Proxy: " + publicText;
+            const isConnected = proxyState.public.online;
 
             const bar = document.getElementById("proxyStatus");
             const span = document.getElementById("proxyStatusText");
-            bar.className = "status-bar " + (isPartial ? "partial" : (isConnected ? "connected" : "disconnected"));
+            bar.className = "status-bar " + (isConnected ? "connected" : "disconnected");
             span.textContent = text;
         }
 
@@ -172,13 +148,7 @@
             document.getElementById("configLoginId").value = "";
             document.getElementById("configWebhookUrl").value = "";
             document.getElementById("configCountryCode").value = "";
-            document.getElementById("localProxyPort").value = "";
             document.getElementById("publicProxyUrl").value = "";
-
-            const modeRadio = document.querySelector(
-                'input[name="proxyMode"][value="' + CONFIG.proxyMode + '"]'
-            );
-            if (modeRadio) modeRadio.checked = true;
 
             applyPlaceholdersFromConfig();
         }
@@ -189,6 +159,7 @@
                 try { CONFIG = { ...DEFAULT_CONFIG, ...JSON.parse(saved) }; }
                 catch { CONFIG = { ...DEFAULT_CONFIG }; }
             }
+            CONFIG.proxyMode = "public";
             setInputsFromConfig();
         }
 
@@ -199,7 +170,6 @@
             const loginIdInput = document.getElementById("configLoginId").value;
             const webhookInput = document.getElementById("configWebhookUrl").value;
             const countryInput = document.getElementById("configCountryCode").value;
-            const localPortInput = document.getElementById("localProxyPort").value;
 
             CONFIG = {
                 projectId: (projectIdInput && projectIdInput.trim()) || DEFAULT_CONFIG.projectId,
@@ -207,11 +177,7 @@
                 loginId: (loginIdInput && loginIdInput.trim()) || DEFAULT_CONFIG.loginId,
                 webhookUrl: (webhookInput && webhookInput.trim()) || DEFAULT_CONFIG.webhookUrl,
                 countryCode: (countryInput && countryInput.trim()) || DEFAULT_CONFIG.countryCode,
-                proxyMode: document.querySelector('input[name="proxyMode"]:checked').value,
-                localProxyPort: parseInt(
-                    (localPortInput && localPortInput.trim()) ||
-                    String(DEFAULT_CONFIG.localProxyPort), 10
-                ) || DEFAULT_CONFIG.localProxyPort,
+                proxyMode: "public",
                 publicProxyUrl: (publicUrlInput && publicUrlInput.trim()) || DEFAULT_CONFIG.publicProxyUrl,
                 version: CONFIG.version || DEFAULT_CONFIG.version,
                 deviceType: DEFAULT_CONFIG.deviceType,
@@ -220,23 +186,19 @@
 
             localStorage.setItem("pgBanCheckerConfig", JSON.stringify(CONFIG));
 
-            proxyState.local.online = false;
-            proxyState.local.code = 0;
             proxyState.public.online = false;
             proxyState.public.code = 0;
             versionFetchSucceeded = false;
 
-            await Promise.all([checkLocalProxy(), checkPublicProxy()]);
+            await checkPublicProxy();
             await checkAndFetchVersionIfNeeded();
         }
 
         async function resetSettings() {
-            CONFIG = { ...DEFAULT_CONFIG };
+            CONFIG = { ...DEFAULT_CONFIG, proxyMode: "public" };
             localStorage.removeItem("pgBanCheckerConfig");
             setInputsFromConfig();
 
-            proxyState.local.online = false;
-            proxyState.local.code = 0;
             proxyState.public.online = false;
             proxyState.public.code = 0;
             versionFetchSucceeded = false;
@@ -246,7 +208,7 @@
                 versionInput.value = "";
             }
 
-            await Promise.all([checkLocalProxy(), checkPublicProxy()]);
+            await checkPublicProxy();
             await checkAndFetchVersionIfNeeded();
         }
 
@@ -269,25 +231,8 @@
 
         async function checkAndFetchVersionIfNeeded() {
             if (versionFetchSucceeded) return;
-            const hasWorkingProxy = proxyState.local.online || proxyState.public.online;
+            const hasWorkingProxy = proxyState.public.online;
             if (hasWorkingProxy) await initVersion();
-        }
-
-        async function checkLocalProxy() {
-            try {
-                const controller = new AbortController();
-                const t = setTimeout(function () { controller.abort(); }, 3000);
-                const r = await fetch("http://localhost:" + CONFIG.localProxyPort + "/health", {
-                    method: "GET", mode: "cors", signal: controller.signal
-                });
-                clearTimeout(t);
-                proxyState.local.online = r.ok;
-                proxyState.local.code = r.ok ? 200 : (r.status || 0);
-            } catch {
-                proxyState.local.online = false;
-                proxyState.local.code = 0;
-            }
-            updateStatus();
         }
 
         async function checkPublicProxy() {
@@ -314,52 +259,22 @@
 
         async function makeRequest(method, host, path, headers, body) {
             const targetUrl = "https://" + host + path;
-            const mode = CONFIG.proxyMode;
-            const localProxyUrl = "http://localhost:" + CONFIG.localProxyPort + "/proxy";
             const publicProxyUrl = CONFIG.publicProxyUrl + encodeURIComponent(targetUrl);
 
             let lastError = "";
-            let okLocal = null;
 
-            if ((mode === "local" || mode === "auto") && proxyState.local.online) {
-                try {
-                    const response = await fetch(localProxyUrl, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            method: method,
-                            url: targetUrl,
-                            headers: headers || {},
-                            body: body || ""
-                        })
-                    });
-                    const result = await response.json();
-                    if (result.success) {
-                        okLocal = { status: result.status, body: result.body, error: "" };
-                        if (mode === "local") return okLocal;
-                    } else {
-                        lastError = result.error || "Local proxy error";
-                    }
-                } catch (e) {
-                    lastError = e.message || "Local proxy failed";
-                }
+            try {
+                const response = await fetch(publicProxyUrl, {
+                    method: method,
+                    headers: headers || {},
+                    body: (method !== "GET" && method !== "HEAD") ? body : undefined
+                });
+                const text = await response.text();
+                if (response.status > 0) return { status: response.status, body: text, error: "" };
+            } catch (e) {
+                lastError = e.message || "Public proxy failed";
             }
 
-            if (mode === "public" || (mode === "auto" && !okLocal)) {
-                try {
-                    const response = await fetch(publicProxyUrl, {
-                        method: method,
-                        headers: headers || {},
-                        body: (method !== "GET" && method !== "HEAD") ? body : undefined
-                    });
-                    const text = await response.text();
-                    if (response.status > 0) return { status: response.status, body: text, error: "" };
-                } catch (e) {
-                    lastError = e.message || "Public proxy failed";
-                }
-            }
-
-            if (okLocal) return okLocal;
             return { status: 0, body: "", error: lastError };
         }
 
@@ -552,9 +467,8 @@
         async function init() {
             loadConfig();
             wireCopyButtons();
-            await Promise.all([checkLocalProxy(), checkPublicProxy()]);
+            await checkPublicProxy();
             await checkAndFetchVersionIfNeeded();
-            setInterval(checkLocalProxy, 5000);
         }
 
         document.addEventListener("DOMContentLoaded", init);
@@ -578,26 +492,6 @@
             <aside class="card narrow" id="settingsPanel">
                 <h2><span>Settings</span></h2>
 
-                <label>Proxy Mode</label>
-                <div class="proxy-options-row">
-                    <label class="proxy-option">
-                        <input type="radio" name="proxyMode" id="modeAuto" value="auto" checked>
-                        <span>Auto</span>
-                    </label>
-                    <label class="proxy-option">
-                        <input type="radio" name="proxyMode" id="modeLocal" value="local">
-                        <span>Local</span>
-                    </label>
-                    <label class="proxy-option">
-                        <input type="radio" name="proxyMode" id="modePublic" value="public">
-                        <span>Public</span>
-                    </label>
-                </div>
-
-                <div class="form-group">
-                    <label>Local Port</label>
-                    <input type="number" id="localProxyPort">
-                </div>
                 <div class="form-group">
                     <label>Public Proxy URL</label>
                     <input type="text" id="publicProxyUrl">
@@ -673,12 +567,6 @@
                     <button class="btn btn-primary" type="button" id="checkBtn" onclick="checkBan()" style="flex:1">
                         Check Ban
                     </button>
-                    <button class="btn download-btn"
-                            type="button"
-                            onclick="window.open('https://github.com/Lurk-r/Lurk-r.github.io/tree/main/other/proxy','_blank')"
-                            title="Download Proxy">
-                        ⬇
-                    </button>
                 </div>
 
                 <section class="card result-card check-result-column" id="resultCard">
@@ -715,4 +603,3 @@
     </div>
 </body>
 </html>
-
