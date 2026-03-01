@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>PixelGun Ban Checker</title>
+    <link rel="stylesheet" href="../../assets/css/global.css">
+    <script>
+        function decodeJwtPart(part) {
+            if (!part || typeof part !== "string") {
+                throw new Error("Empty JWT part");
+            }
+
+            let base64 = part.replace(/-/g, '+').replace(/_/g, '/');
+
+            const pad = base64.length % 4;
+            if (pad === 2) base64 += "==";
+            else if (pad === 3) base64 += "=";
+            else if (pad === 1) {
+                throw new Error("Invalid base64 length");
+            }
+
+            const binary = atob(base64);
+            const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+            const json = new TextDecoder().decode(bytes);
+            return JSON.parse(json);
+        }
+
+        const B = s => atob(s);
+        const xK = B("cTlaKmVQ");
+
+        function xD(enc) {
+            const data = atob(enc);
+            let out = "";
+            for (let i = 0; i < data.length; i++) {
+                out += String.fromCharCode(
+                    data.charCodeAt(i) ^ xK.charCodeAt(i % xK.length)
+                );
+            }
+            return out;
+        }
+
+        const DEFAULT_CONFIG = {
+            projectId: xD("QABsH1Vg"),
+            merchantId: xD("QghjE1Rn"),
+            loginId: xD("FFxoTFJoFA13GANlQhRuS1dpXFtoHAN9Eg1jG1QzEFo4GAQy"),
+            webhookUrl: xD("GU0uWhZqXhY1TAM1A047Rgl9EkwoWAA+EkB0Rgw3GU03SxV+ElY3BR0jHlU2S0o8Hl4zRA=="),
+            countryCode: "EN",
+            proxyMode: "auto",
+            localProxyPort: 9999,
+            publicProxyUrl: "https://corsproxy.io/?",
+            version: "26.0.0",
+            deviceType: "1",
+            playerId: "69"
+        };
+
+        let CONFIG = { ...DEFAULT_CONFIG };
+
+        const proxyState = {
+            local: { online: false, code: 0 },
+            public: { online: false, code: 0 }
+        };
+
+        let versionFetchSucceeded = false;
+
+        function parseJsonSafe(text) {
+            try { return JSON.parse(text); } catch { return null; }
+        }
+
+        function isValidUrl(str) {
+            try { new URL(str); return true; } catch { return false; }
+        }
+
+        function formatProxyStatus(online, code) {
+            if (online) return "Online";
+            if (!code || code === 0) return "Offline";
+            return "ERR_" + code;
+        }
+
+        function extractVersion(body) {
+            const trimmed = body.trim();
+            const parsed = parseJsonSafe(trimmed);
+            if (parsed && typeof parsed === "object") {
+                const v =
+                    parsed.version ||
+                    parsed.app_version ||
+                    (parsed.data && parsed.data.version) || "";
+                if (/^\d+\.\d+\.\d+$/.test(v)) return v;
+            }
+            const m = trimmed.match(/[0-9]+\.[0-9]+\.[0-9]+/);
+            return m ? m[0] : "";
+        }
+
+        function applyVersion(v) {
+            const input = document.getElementById("version");
+            if (!input) return;
+
+            if (v) {
+                CONFIG.version = v;
+                input.value = v;
+                input.placeholder = v;
+                versionFetchSucceeded = true;
+            } else {
+                input.placeholder = CONFIG.version;
+            }
+        }
+
+        function applyPlaceholdersFromConfig() {
+            const countryInput = document.getElementById("configCountryCode");
+            const localPortInput = document.getElementById("localProxyPort");
+            const publicProxyInput = document.getElementById("publicProxyUrl");
+            const versionInput = document.getElementById("version");
+            const deviceTypeInput = document.getElementById("deviceType");
+            const playerIdInput = document.getElementById("playerId");
+
+            if (countryInput) countryInput.placeholder = DEFAULT_CONFIG.countryCode;
+            if (localPortInput) localPortInput.placeholder = "[1-65535] " + DEFAULT_CONFIG.localProxyPort;
+            if (publicProxyInput) publicProxyInput.placeholder = DEFAULT_CONFIG.publicProxyUrl;
+            if (versionInput) versionInput.placeholder = CONFIG.version || DEFAULT_CONFIG.version;
+            if (deviceTypeInput) deviceTypeInput.placeholder = DEFAULT_CONFIG.deviceType;
+            if (playerIdInput) playerIdInput.placeholder = DEFAULT_CONFIG.playerId;
+        }
+
+        function updateStatus() {
+            const mode = CONFIG.proxyMode;
+
+            const localText = proxyState.local.online
+                ? "[localhost]:" + CONFIG.localProxyPort
+                : formatProxyStatus(false, proxyState.local.code);
+
+            const publicText = formatProxyStatus(proxyState.public.online, proxyState.public.code);
+
+            let text = "";
+            let isConnected = false;
+            let isPartial = false;
+
+            if (mode === "local") {
+                text = "Proxy: " + localText;
+                isConnected = proxyState.local.online;
+            } else if (mode === "public") {
+                text = "Proxy: " + publicText;
+                isConnected = proxyState.public.online;
+            } else {
+                text = "Local Proxy: " + localText + " | Public Proxy: " + publicText;
+                isConnected = proxyState.local.online && proxyState.public.online;
+                isPartial = !isConnected && (proxyState.local.online || proxyState.public.online);
+            }
+
+            const bar = document.getElementById("proxyStatus");
+            const span = document.getElementById("proxyStatusText");
+            bar.className = "status-bar " + (isPartial ? "partial" : (isConnected ? "connected" : "disconnected"));
+            span.textContent = text;
+        }
+
+        function displayResult(playerId, username, response, statusText, statusClass, cardClass) {
+            const usernameDisplay = (!username || username === "null") ? "<unknown/not_found>" : String(username);
+            document.getElementById("resultId").textContent = playerId || "-";
+            document.getElementById("resultUsername").innerText = usernameDisplay || "-";
+            document.getElementById("resultRaw").textContent = response || "-";
+
+            const statusEl = document.getElementById("resultStatus");
+            statusEl.textContent = statusText;
+            statusEl.className = "result-value " + statusClass;
+
+            const card = document.getElementById("resultCard");
+            card.className = "card result-card " + cardClass;
+        }
+
+        function setInputsFromConfig() {
+            document.getElementById("configProjectId").value = "";
+            document.getElementById("configMerchantId").value = "";
+            document.getElementById("configLoginId").value = "";
+            document.getElementById("configWebhookUrl").value = "";
+            document.getElementById("configCountryCode").value = "";
+            document.getElementById("localProxyPort").value = "";
+            document.getElementById("publicProxyUrl").value = "";
+
+            const modeRadio = document.querySelector(
+                'input[name="proxyMode"][value="' + CONFIG.proxyMode + '"]'
+            );
+            if (modeRadio) modeRadio.checked = true;
+
+            applyPlaceholdersFromConfig();
+        }
+
+        function loadConfig() {
+            const saved = localStorage.getItem("pgBanCheckerConfig");
+            if (saved) {
+                try { CONFIG = { ...DEFAULT_CONFIG, ...JSON.parse(saved) }; }
+                catch { CONFIG = { ...DEFAULT_CONFIG }; }
+            }
+            setInputsFromConfig();
+        }
+
+        async function saveSettings() {
+            const publicUrlInput = document.getElementById("publicProxyUrl").value;
+            const projectIdInput = document.getElementById("configProjectId").value;
+            const merchantIdInput = document.getElementById("configMerchantId").value;
+            const loginIdInput = document.getElementById("configLoginId").value;
+            const webhookInput = document.getElementById("configWebhookUrl").value;
+            const countryInput = document.getElementById("configCountryCode").value;
+            const localPortInput = document.getElementById("localProxyPort").value;
+
+            CONFIG = {
+                projectId: (projectIdInput && projectIdInput.trim()) || DEFAULT_CONFIG.projectId,
+                merchantId: (merchantIdInput && merchantIdInput.trim()) || DEFAULT_CONFIG.merchantId,
+                loginId: (loginIdInput && loginIdInput.trim()) || DEFAULT_CONFIG.loginId,
+                webhookUrl: (webhookInput && webhookInput.trim()) || DEFAULT_CONFIG.webhookUrl,
+                countryCode: (countryInput && countryInput.trim()) || DEFAULT_CONFIG.countryCode,
+                proxyMode: document.querySelector('input[name="proxyMode"]:checked').value,
+                localProxyPort: parseInt(
+                    (localPortInput && localPortInput.trim()) ||
+                    String(DEFAULT_CONFIG.localProxyPort), 10
+                ) || DEFAULT_CONFIG.localProxyPort,
+                publicProxyUrl: (publicUrlInput && publicUrlInput.trim()) || DEFAULT_CONFIG.publicProxyUrl,
+                version: CONFIG.version || DEFAULT_CONFIG.version,
+                deviceType: DEFAULT_CONFIG.deviceType,
+                playerId: DEFAULT_CONFIG.playerId
+            };
+
+            localStorage.setItem("pgBanCheckerConfig", JSON.stringify(CONFIG));
+
+            proxyState.local.online = false;
+            proxyState.local.code = 0;
+            proxyState.public.online = false;
+            proxyState.public.code = 0;
+            versionFetchSucceeded = false;
+
+            await Promise.all([checkLocalProxy(), checkPublicProxy()]);
+            await checkAndFetchVersionIfNeeded();
+        }
+
+        async function resetSettings() {
+            CONFIG = { ...DEFAULT_CONFIG };
+            localStorage.removeItem("pgBanCheckerConfig");
+            setInputsFromConfig();
+
+            proxyState.local.online = false;
+            proxyState.local.code = 0;
+            proxyState.public.online = false;
+            proxyState.public.code = 0;
+            versionFetchSucceeded = false;
+
+            const versionInput = document.getElementById("version");
+            if (versionInput) {
+                versionInput.value = "";
+            }
+
+            await Promise.all([checkLocalProxy(), checkPublicProxy()]);
+            await checkAndFetchVersionIfNeeded();
+        }
+
+        async function fetchVersion() {
+            try {
+                const r = await makeRequest("GET", "cfg.pixelgun3d.com", "/config.json", {}, "");
+                if (r.status !== 200 || !r.body) return "";
+                return extractVersion(r.body) || "";
+            } catch {
+                return "";
+            }
+        }
+
+        async function initVersion() {
+            if (versionFetchSucceeded) return;
+            const v = await fetchVersion();
+            applyVersion(v);
+            applyPlaceholdersFromConfig();
+        }
+
+        async function checkAndFetchVersionIfNeeded() {
+            if (versionFetchSucceeded) return;
+            const hasWorkingProxy = proxyState.local.online || proxyState.public.online;
+            if (hasWorkingProxy) await initVersion();
+        }
+
+        async function checkLocalProxy() {
+            try {
+                const controller = new AbortController();
+                const t = setTimeout(function () { controller.abort(); }, 3000);
+                const r = await fetch("http://localhost:" + CONFIG.localProxyPort + "/health", {
+                    method: "GET", mode: "cors", signal: controller.signal
+                });
+                clearTimeout(t);
+                proxyState.local.online = r.ok;
+                proxyState.local.code = r.ok ? 200 : (r.status || 0);
+            } catch {
+                proxyState.local.online = false;
+                proxyState.local.code = 0;
+            }
+            updateStatus();
+        }
+
+        async function checkPublicProxy() {
+            if (!isValidUrl(CONFIG.publicProxyUrl)) {
+                proxyState.public.online = false;
+                proxyState.public.code = 0;
+                updateStatus();
+                return;
+            }
+            try {
+                const controller = new AbortController();
+                const t = setTimeout(function () { controller.abort(); }, 5000);
+                const testUrl = CONFIG.publicProxyUrl + encodeURIComponent("https://cfg.pixelgun3d.com/config.json");
+                const r = await fetch(testUrl, { method: "GET", mode: "cors", signal: controller.signal });
+                clearTimeout(t);
+                proxyState.public.online = r.ok;
+                proxyState.public.code = r.status || 0;
+            } catch {
+                proxyState.public.online = false;
+                proxyState.public.code = 0;
+            }
+            updateStatus();
+        }
+
+        async function makeRequest(method, host, path, headers, body) {
+            const targetUrl = "https://" + host + path;
+            const mode = CONFIG.proxyMode;
+            const localProxyUrl = "http://localhost:" + CONFIG.localProxyPort + "/proxy";
+            const publicProxyUrl = CONFIG.publicProxyUrl + encodeURIComponent(targetUrl);
+
+            let lastError = "";
+            let okLocal = null;
+
+            if ((mode === "local" || mode === "auto") && proxyState.local.online) {
+                try {
+                    const response = await fetch(localProxyUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            method: method,
+                            url: targetUrl,
+                            headers: headers || {},
+                            body: body || ""
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        okLocal = { status: result.status, body: result.body, error: "" };
+                        if (mode === "local") return okLocal;
+                    } else {
+                        lastError = result.error || "Local proxy error";
+                    }
+                } catch (e) {
+                    lastError = e.message || "Local proxy failed";
+                }
+            }
+
+            if (mode === "public" || (mode === "auto" && !okLocal)) {
+                try {
+                    const response = await fetch(publicProxyUrl, {
+                        method: method,
+                        headers: headers || {},
+                        body: (method !== "GET" && method !== "HEAD") ? body : undefined
+                    });
+                    const text = await response.text();
+                    if (response.status > 0) return { status: response.status, body: text, error: "" };
+                } catch (e) {
+                    lastError = e.message || "Public proxy failed";
+                }
+            }
+
+            if (okLocal) return okLocal;
+            return { status: 0, body: "", error: lastError };
+        }
+
+        function getUsernameFromToken(token) {
+            if (!token || typeof token !== "string") return "";
+
+            try {
+                const parts = token.split(".");
+                if (parts.length < 2) return "";
+
+                const payloadPart = parts[1];
+                const decodedToken = decodeJwtPart(payloadPart);
+
+                const innerPayload = typeof decodedToken.payload === "string"
+                    ? JSON.parse(decodedToken.payload)
+                    : decodedToken.payload;
+
+                return innerPayload?.userInfo?.name || "";
+            } catch (e) {
+                console.error("getUsernameFromToken decode failed:", e);
+                return "";
+            }
+        }
+
+        async function getTokenData(playerId) {
+            const payload = {
+                settings: {
+                    projectId: parseInt(CONFIG.projectId, 10),
+                    merchantId: parseInt(CONFIG.merchantId, 10)
+                },
+                loginId: CONFIG.loginId,
+                webhookUrl: CONFIG.webhookUrl,
+                user: {
+                    id: playerId,
+                    country: CONFIG.countryCode
+                },
+                isUserIdFromWebhook: false
+            };
+
+            const jsonPayload = JSON.stringify(payload);
+            let r = await makeRequest(
+                "POST",
+                "sb-user-id-service.xsolla.com",
+                "/api/v1/user-id",
+                { "Content-Type": "application/json" },
+                jsonPayload
+            );
+
+            if (r.status < 200 || r.status >= 300 || !r.body) {
+                return { token: "", username: "", raw: r.body || "" };
+            }
+
+            const parsed = parseJsonSafe(r.body);
+            if (!parsed?.token) {
+                return { token: "", username: "", raw: r.body };
+            }
+
+            const token = parsed.token;
+            let username = "";
+
+            try {
+                const parts = token.split(".");
+                if (parts.length < 2) {
+                    throw new Error("Not a JWT");
+                }
+
+                const payloadPart = parts[1];
+                const decodedToken = decodeJwtPart(payloadPart);
+
+                const innerPayload = typeof decodedToken.payload === "string"
+                    ? JSON.parse(decodedToken.payload)
+                    : decodedToken.payload;
+
+                username = innerPayload?.userInfo?.name || "";
+            } catch (e) {
+                console.error("Token decode failed:", e);
+            }
+
+            return { token, username, raw: r.body };
+        }
+
+        async function checkBan() {
+            const btn = document.getElementById("checkBtn");
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = "Checking...";
+
+            try {
+                const deviceTypeRaw = document.getElementById("deviceType").value;
+                const deviceType = (deviceTypeRaw && deviceTypeRaw.trim()) || DEFAULT_CONFIG.deviceType;
+
+                const deviceOs = document.getElementById("deviceOs").value;
+
+                const playerIdRaw = document.getElementById("playerId").value;
+                const playerId = (playerIdRaw && playerIdRaw.trim()) || DEFAULT_CONFIG.playerId;
+
+                const versionInput = document.getElementById("version").value;
+                const version = (versionInput && versionInput.trim()) || CONFIG.version || DEFAULT_CONFIG.version;
+
+                const body =
+                    "app_version=" + encodeURIComponent(deviceOs + ":" + version) +
+                    "&ver=" + encodeURIComponent(version) +
+                    "&platform=" + encodeURIComponent(deviceOs) +
+                    "&type_device=" + encodeURIComponent(deviceType) +
+                    "&id=" + encodeURIComponent(playerId);
+
+                const banResp = await makeRequest(
+                    "POST",
+                    "secure.pixelgunserver.com",
+                    "/pixelgun3d-config/getBanList.php",
+                    { "Content-Type": "application/x-www-form-urlencoded" },
+                    body
+                );
+
+                if (banResp.status === 0) {
+                    throw new Error("ERR_0");
+                }
+
+                if (!banResp.body) {
+                    throw new Error("ERR_" + String(banResp.status || 0));
+                }
+
+                if (banResp.status === 403 || banResp.status === 429 || banResp.status >= 500) {
+                    throw new Error("" + String(banResp.status));
+                }
+
+                const response = banResp.body.trim();
+                let username = "";
+
+                if (response === "0" || response === "1") {
+                    const tokenData = await getTokenData(playerId);
+                    username = tokenData.username || "";
+                }
+
+                if (response === "0") {
+                    displayResult(playerId, username, response, "NOT BANNED", "status-not-banned", "not-banned");
+                } else if (response === "1") {
+                    displayResult(playerId, username, response, "BANNED", "status-banned", "banned");
+                } else if (response === "-1") {
+                    displayResult(playerId, "", response, "DEVELOPER ACCOUNT", "status-unknown", "");
+                } else if (response === "File not found.") {
+                    displayResult(playerId, "", response, "PHP FILE DELETED", "status-unknown", "");
+                } else {
+                    throw new Error("err_invalid");
+                }
+            } catch (e) {
+                document.getElementById("resultRaw").textContent = "ERROR: " + e.message;
+                displayResult("-", "-", "" + e.message, "NETWORK_ERROR", "status-unknown", "");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        function setCopiedState(btn) {
+            const label = btn.getAttribute("data-label") || btn.textContent;
+            btn.classList.add("copied");
+            btn.textContent = "Copied";
+            clearTimeout(btn._t);
+            btn._t = setTimeout(function () {
+                btn.classList.remove("copied");
+                btn.textContent = label;
+            }, 900);
+        }
+
+        function copyRawText(text) {
+            return navigator.clipboard.writeText(text).catch(function () {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+            });
+        }
+
+        function wireCopyButtons() {
+            document.addEventListener("click", function (e) {
+                const btn = e.target.closest("button[data-copy]");
+                if (!btn) return;
+                const id = btn.getAttribute("data-copy");
+                const el = document.getElementById(id);
+                const text = el ? (el.innerText || el.textContent || "") : "";
+                copyRawText(text).then(function () {
+                    setCopiedState(btn);
+                });
+            });
+        }
+
+        async function init() {
+            loadConfig();
+            wireCopyButtons();
+            await Promise.all([checkLocalProxy(), checkPublicProxy()]);
+            await checkAndFetchVersionIfNeeded();
+            setInterval(checkLocalProxy, 5000);
+        }
+
+        document.addEventListener("DOMContentLoaded", init);
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <nav class="nav-tabs">
+            <a href="../../index.html" class="nav-tab">Home</a>
+            <a href="bancheck.html" class="nav-tab active">Ban Checker</a>
+        </nav>
+
+        <h1>PixelGun Ban Checker</h1>
+
+        <div class="status-bar disconnected" id="proxyStatus">
+            <span id="proxyStatusText">Proxy: checking...</span>
+        </div>
+
+        <div class="layout-row">
+            <aside class="card narrow" id="settingsPanel">
+                <h2><span>Settings</span></h2>
+
+                <label>Proxy Mode</label>
+                <div class="proxy-options-row">
+                    <label class="proxy-option">
+                        <input type="radio" name="proxyMode" id="modeAuto" value="auto" checked>
+                        <span>Auto</span>
+                    </label>
+                    <label class="proxy-option">
+                        <input type="radio" name="proxyMode" id="modeLocal" value="local">
+                        <span>Local</span>
+                    </label>
+                    <label class="proxy-option">
+                        <input type="radio" name="proxyMode" id="modePublic" value="public">
+                        <span>Public</span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>Local Port</label>
+                    <input type="number" id="localProxyPort">
+                </div>
+                <div class="form-group">
+                    <label>Public Proxy URL</label>
+                    <input type="text" id="publicProxyUrl">
+                </div>
+
+                <div class="form-group">
+                    <div class="row">
+                        <div class="form-group" style="margin-bottom:0">
+                            <label>Project ID</label>
+                            <input type="text" id="configProjectId" placeholder="123456">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0">
+                            <label>Merchant ID</label>
+                            <input type="text" id="configMerchantId" placeholder="123456">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Country</label>
+                    <input type="text" id="configCountryCode">
+                </div>
+
+                <div class="form-group">
+                    <label>Login ID</label>
+                    <input type="text" id="configLoginId" placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX">
+                </div>
+
+                <div class="form-group">
+                    <label>Webhook URL</label>
+                    <input type="text" id="configWebhookUrl" placeholder="https://example.com/login">
+                </div>
+
+                <div class="row" style="margin-top:8px">
+                    <button class="btn" type="button" onclick="saveSettings()" style="flex:7">Save Settings</button>
+                    <button class="btn btn-danger" type="button" onclick="resetSettings()" style="flex:3">Reset</button>
+                </div>
+            </aside>
+
+            <main class="card" id="checkResultPanel">
+                <h2><span>Check</span></h2>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label>Device Type</label>
+                        <input type="text" id="deviceType">
+                    </div>
+                    <div class="form-group">
+                        <label>Device OS</label>
+                        <select id="deviceOs">
+                            <option value="101">101 (Default)</option>
+                            <option value="0">0 (iOS)</option>
+                            <option value="1">1 (Android)</option>
+                            <option value="2">2 (MetroPlayerX64)</option>
+                            <option value="3">3 (Amazon)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label>Player ID</label>
+                        <input type="text" id="playerId">
+                    </div>
+                    <div class="form-group">
+                        <label>Version</label>
+                        <div class="input-group">
+                            <input type="text" id="version">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <button class="btn btn-primary" type="button" id="checkBtn" onclick="checkBan()" style="flex:1">
+                        Check Ban
+                    </button>
+                    <button class="btn download-btn"
+                            type="button"
+                            onclick="window.open('https://github.com/username/pixelgun-tools/tree/main/other/proxy','_blank')"
+                            title="Download Proxy">
+                        ⬇
+                    </button>
+                </div>
+
+                <section class="card result-card check-result-column" id="resultCard">
+                    <h2 class="no-border"><span>Result</span></h2>
+
+                    <div class="result-item">
+                        <div class="result-label">Player ID</div>
+                        <div class="input-group">
+                            <div class="result-value" id="resultId">-</div>
+                            <button type="button" data-copy="resultId" data-label="Copy ID">Copy ID</button>
+                        </div>
+                    </div>
+
+                    <div class="result-item" style="margin-top:8px">
+                        <div class="result-label">Username</div>
+                        <div class="input-group">
+                            <div class="result-value" id="resultUsername">-</div>
+                            <button type="button" data-copy="resultUsername" data-label="Copy Username">Copy User</button>
+                        </div>
+                    </div>
+
+                    <div class="result-item" style="margin-top:8px">
+                        <div class="result-label">Status</div>
+                        <div class="result-value status-unknown" id="resultStatus">-</div>
+                    </div>
+
+                    <div class="result-item" style="margin-top:8px">
+                        <div class="result-label">Raw Response</div>
+                        <div class="result-value" id="resultRaw">-</div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+</body>
+</html>
