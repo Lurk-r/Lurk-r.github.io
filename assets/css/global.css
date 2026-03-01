@@ -17,10 +17,14 @@ h2 { color: var(--accent-strong); margin-bottom: 10px; font-size: 12px; text-tra
 .status-bar { font-size: 11px; color: var(--text-dim); border: 1px solid var(--border); background: #0f0f0f; padding: 6px 8px; margin-bottom: 10px; }
 
     .status-bar.connected { border-color: #1f5b1f; color: #9fca9f; }
+
     .status-bar.disconnected { border-color: var(--border-strong); color: #d8a4a4; }
+
     .status-bar.partial { border-color: #8a5f2a; color: var(--warn); }
 
 .form-group { margin-bottom: 10px; }
+
+    .form-group.compact { margin-bottom: 0; }
 
 label { display: block; margin-bottom: 4px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; }
 
@@ -33,6 +37,7 @@ select { width: 100%; padding: 8px; border: 1px solid var(--border); background:
     select:focus { outline: none; border-color: var(--accent-strong); }
 
 .row { display: flex; gap: 10px; }
+
     .row .form-group { flex: 1; }
 
 .hidden { display: none; }
@@ -40,6 +45,7 @@ select { width: 100%; padding: 8px; border: 1px solid var(--border); background:
 .btn { width: 100%; border: 1px solid var(--border-strong); padding: 10px; margin-top: 8px; cursor: pointer; font-size: 12px; font-weight: bold; text-transform: uppercase; font-family: inherit; background: #1c1c1c; color: #ffbebe; }
 
     .btn:hover { background: #252525; }
+
     .btn:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .btn-primary { background: #7a1515; color: #ffeaea; border-color: #a41f1f; }
@@ -50,17 +56,18 @@ select { width: 100%; padding: 8px; border: 1px solid var(--border); background:
 
     .btn-danger:hover { background: #3a0f0f; }
 
-    .toggle-btn:hover { border-color: var(--accent-strong); color: var(--accent-strong); }
-
 .proxy-options-row { display: flex; gap: 15px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
 
 .proxy-option { display: flex; align-items: center; gap: 6px; }
 
     .proxy-option input[type="radio"] { width: auto; margin: 0; }
+
     .proxy-option label { margin: 0; cursor: pointer; font-size: 11px; color: var(--text-dim); text-transform: uppercase; }
 
 .result-card { border-color: var(--border); background: var(--panel); }
+
     .result-card.banned { border-color: #8b1e1e; background: #1f0e0e; }
+
     .result-card.not-banned { border-color: #2c582c; background: #0f1a0f; }
 
 .result-item { padding: 4px 0; }
@@ -70,11 +77,15 @@ select { width: 100%; padding: 8px; border: 1px solid var(--border); background:
 .result-value { padding: 8px; background: #080808; border: 1px solid var(--border); font-size: 12px; word-break: break-all; height: 33px; min-height: 33px; display: flex; align-items: center; box-sizing: border-box; }
 
 .status-banned { color: var(--bad); font-weight: bold; }
+
 .status-not-banned { color: var(--good); font-weight: bold; }
+
 .status-unknown { color: var(--warn); font-weight: bold; }
 
 .home-section { text-align: center; margin-bottom: 30px; }
+
     .home-section h1 { font-size: 24px; margin-bottom: 20px; }
+
     .home-section p { color: var(--text-dim); margin-bottom: 20px; }
 
 .home-links { display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }
@@ -100,11 +111,10 @@ select { width: 100%; padding: 8px; border: 1px solid var(--border); background:
     .input-group button { flex: 0 0 auto; border: 1px solid var(--border-strong); border-left: none; background: #1d0b0b; color: #ffaaaa; font-size: 10px; cursor: pointer; font-family: inherit; text-transform: uppercase; padding: 0 12px; white-space: nowrap; display: flex; align-items: center; height: 100%; }
 
         .input-group button:hover { background: #2a0f0f; }
-        .input-group button.active { border-color: var(--accent-strong); }
-        .input-group button.copied { border-color: #2c582c; background: #0f1a0f; color: #bff0bf; }
 
-.download-btn { width: 40px; padding: 10px 5px; margin-top: 8px; font-size: 10px; flex: 0 0 40px; }
-#resultCard { margin-top: 12px; }
+        .input-group button.active { border-color: var(--accent-strong); }
+
+        .input-group button.copied { border-color: #2c582c; background: #0f1a0f; color: #bff0bf; }
 
 .layout-row { display: flex; gap: 8px; margin-bottom: 8px; }
 
@@ -114,8 +124,13 @@ select { width: 100%; padding: 8px; border: 1px solid var(--border); background:
 
 @media (max-width: 768px) {
     .layout-row { flex-direction: column; }
+
         .layout-row .card,
         .layout-row .card.narrow { flex: 1 1 auto; }
+
     #checkResultPanel { display: flex; flex-direction: column; }
+
     #settingsPanel { order: 2; }
 }
+
+body { }
