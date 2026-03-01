@@ -10,16 +10,13 @@
             if (!part || typeof part !== "string") {
                 throw new Error("Empty JWT part");
             }
-
             let base64 = part.replace(/-/g, '+').replace(/_/g, '/');
-
             const pad = base64.length % 4;
             if (pad === 2) base64 += "==";
             else if (pad === 3) base64 += "=";
             else if (pad === 1) {
                 throw new Error("Invalid base64 length");
             }
-
             const binary = atob(base64);
             const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
             const json = new TextDecoder().decode(bytes);
@@ -92,7 +89,6 @@
         function applyVersion(v) {
             const input = document.getElementById("version");
             if (!input) return;
-
             if (v) {
                 CONFIG.version = v;
                 input.value = v;
@@ -109,7 +105,6 @@
             const versionInput = document.getElementById("version");
             const deviceTypeInput = document.getElementById("deviceType");
             const playerIdInput = document.getElementById("playerId");
-
             if (countryInput) countryInput.placeholder = DEFAULT_CONFIG.countryCode;
             if (publicProxyInput) publicProxyInput.placeholder = DEFAULT_CONFIG.publicProxyUrl;
             if (versionInput) versionInput.placeholder = CONFIG.version || DEFAULT_CONFIG.version;
@@ -121,7 +116,6 @@
             const publicText = formatProxyStatus(proxyState.public.online, proxyState.public.code);
             const text = "Proxy: " + publicText;
             const isConnected = proxyState.public.online;
-
             const bar = document.getElementById("proxyStatus");
             const span = document.getElementById("proxyStatusText");
             bar.className = "status-bar " + (isConnected ? "connected" : "disconnected");
@@ -133,13 +127,11 @@
             document.getElementById("resultId").textContent = playerId || "-";
             document.getElementById("resultUsername").innerText = usernameDisplay || "-";
             document.getElementById("resultRaw").textContent = response || "-";
-
             const statusEl = document.getElementById("resultStatus");
             statusEl.textContent = statusText;
             statusEl.className = "result-value " + statusClass;
-
-            const card = document.getElementById("resultCard");
-            card.className = "card result-card " + cardClass;
+            const card = document.getElementById("checkResultPanel");
+            if (card) card.className = "card result-card " + cardClass;
         }
 
         function setInputsFromConfig() {
@@ -149,7 +141,6 @@
             document.getElementById("configWebhookUrl").value = "";
             document.getElementById("configCountryCode").value = "";
             document.getElementById("publicProxyUrl").value = "";
-
             applyPlaceholdersFromConfig();
         }
 
@@ -170,7 +161,6 @@
             const loginIdInput = document.getElementById("configLoginId").value;
             const webhookInput = document.getElementById("configWebhookUrl").value;
             const countryInput = document.getElementById("configCountryCode").value;
-
             CONFIG = {
                 projectId: (projectIdInput && projectIdInput.trim()) || DEFAULT_CONFIG.projectId,
                 merchantId: (merchantIdInput && merchantIdInput.trim()) || DEFAULT_CONFIG.merchantId,
@@ -183,13 +173,10 @@
                 deviceType: DEFAULT_CONFIG.deviceType,
                 playerId: DEFAULT_CONFIG.playerId
             };
-
             localStorage.setItem("pgBanCheckerConfig", JSON.stringify(CONFIG));
-
             proxyState.public.online = false;
             proxyState.public.code = 0;
             versionFetchSucceeded = false;
-
             await checkPublicProxy();
             await checkAndFetchVersionIfNeeded();
         }
@@ -198,16 +185,11 @@
             CONFIG = { ...DEFAULT_CONFIG, proxyMode: "public" };
             localStorage.removeItem("pgBanCheckerConfig");
             setInputsFromConfig();
-
             proxyState.public.online = false;
             proxyState.public.code = 0;
             versionFetchSucceeded = false;
-
             const versionInput = document.getElementById("version");
-            if (versionInput) {
-                versionInput.value = "";
-            }
-
+            if (versionInput) versionInput.value = "";
             await checkPublicProxy();
             await checkAndFetchVersionIfNeeded();
         }
@@ -260,9 +242,7 @@
         async function makeRequest(method, host, path, headers, body) {
             const targetUrl = "https://" + host + path;
             const publicProxyUrl = CONFIG.publicProxyUrl + encodeURIComponent(targetUrl);
-
             let lastError = "";
-
             try {
                 const response = await fetch(publicProxyUrl, {
                     method: method,
@@ -274,24 +254,19 @@
             } catch (e) {
                 lastError = e.message || "Public proxy failed";
             }
-
             return { status: 0, body: "", error: lastError };
         }
 
         function getUsernameFromToken(token) {
             if (!token || typeof token !== "string") return "";
-
             try {
                 const parts = token.split(".");
                 if (parts.length < 2) return "";
-
                 const payloadPart = parts[1];
                 const decodedToken = decodeJwtPart(payloadPart);
-
                 const innerPayload = typeof decodedToken.payload === "string"
                     ? JSON.parse(decodedToken.payload)
                     : decodedToken.payload;
-
                 return innerPayload?.userInfo?.name || "";
             } catch (e) {
                 console.error("getUsernameFromToken decode failed:", e);
@@ -313,7 +288,6 @@
                 },
                 isUserIdFromWebhook: false
             };
-
             const jsonPayload = JSON.stringify(payload);
             let r = await makeRequest(
                 "POST",
@@ -322,37 +296,29 @@
                 { "Content-Type": "application/json" },
                 jsonPayload
             );
-
             if (r.status < 200 || r.status >= 300 || !r.body) {
                 return { token: "", username: "", raw: r.body || "" };
             }
-
             const parsed = parseJsonSafe(r.body);
             if (!parsed?.token) {
                 return { token: "", username: "", raw: r.body };
             }
-
             const token = parsed.token;
             let username = "";
-
             try {
                 const parts = token.split(".");
                 if (parts.length < 2) {
                     throw new Error("Not a JWT");
                 }
-
                 const payloadPart = parts[1];
                 const decodedToken = decodeJwtPart(payloadPart);
-
                 const innerPayload = typeof decodedToken.payload === "string"
                     ? JSON.parse(decodedToken.payload)
                     : decodedToken.payload;
-
                 username = innerPayload?.userInfo?.name || "";
             } catch (e) {
                 console.error("Token decode failed:", e);
             }
-
             return { token, username, raw: r.body };
         }
 
@@ -361,26 +327,20 @@
             const originalText = btn.textContent;
             btn.disabled = true;
             btn.textContent = "Checking...";
-
             try {
                 const deviceTypeRaw = document.getElementById("deviceType").value;
                 const deviceType = (deviceTypeRaw && deviceTypeRaw.trim()) || DEFAULT_CONFIG.deviceType;
-
                 const deviceOs = document.getElementById("deviceOs").value;
-
                 const playerIdRaw = document.getElementById("playerId").value;
                 const playerId = (playerIdRaw && playerIdRaw.trim()) || DEFAULT_CONFIG.playerId;
-
                 const versionInput = document.getElementById("version").value;
                 const version = (versionInput && versionInput.trim()) || CONFIG.version || DEFAULT_CONFIG.version;
-
                 const body =
                     "app_version=" + encodeURIComponent(deviceOs + ":" + version) +
                     "&ver=" + encodeURIComponent(version) +
                     "&platform=" + encodeURIComponent(deviceOs) +
                     "&type_device=" + encodeURIComponent(deviceType) +
                     "&id=" + encodeURIComponent(playerId);
-
                 const banResp = await makeRequest(
                     "POST",
                     "secure.pixelgunserver.com",
@@ -388,27 +348,17 @@
                     { "Content-Type": "application/x-www-form-urlencoded" },
                     body
                 );
-
-                if (banResp.status === 0) {
-                    throw new Error("ERR_0");
-                }
-
-                if (!banResp.body) {
-                    throw new Error("ERR_" + String(banResp.status || 0));
-                }
-
+                if (banResp.status === 0) throw new Error("ERR_0");
+                if (!banResp.body) throw new Error("ERR_" + String(banResp.status || 0));
                 if (banResp.status === 403 || banResp.status === 429 || banResp.status >= 500) {
                     throw new Error("" + String(banResp.status));
                 }
-
                 const response = banResp.body.trim();
                 let username = "";
-
                 if (response === "0" || response === "1") {
                     const tokenData = await getTokenData(playerId);
                     username = tokenData.username || "";
                 }
-
                 if (response === "0") {
                     displayResult(playerId, username, response, "NOT BANNED", "status-not-banned", "not-banned");
                 } else if (response === "1") {
@@ -484,13 +434,13 @@
 
         <h1>PixelGun Ban Checker</h1>
 
-        <div class="status-bar disconnected" id="proxyStatus">
-            <span id="proxyStatusText">Proxy: checking...</span>
-        </div>
-
         <div class="layout-row">
             <aside class="card narrow" id="settingsPanel">
                 <h2><span>Settings</span></h2>
+
+                <div class="status-bar disconnected" id="proxyStatus">
+                    <span id="proxyStatusText">Proxy: checking...</span>
+                </div>
 
                 <div class="form-group">
                     <label>Public Proxy URL</label>
@@ -499,16 +449,17 @@
 
                 <div class="form-group">
                     <div class="row">
-                        <div class="form-group" style="margin-bottom:0">
+                        <div class="form-group compact">
                             <label>Project ID</label>
                             <input type="text" id="configProjectId" placeholder="123456">
                         </div>
-                        <div class="form-group" style="margin-bottom:0">
+                        <div class="form-group compact">
                             <label>Merchant ID</label>
                             <input type="text" id="configMerchantId" placeholder="123456">
                         </div>
                     </div>
                 </div>
+
                 <div class="form-group">
                     <label>Country</label>
                     <input type="text" id="configCountryCode">
@@ -569,35 +520,34 @@
                     </button>
                 </div>
 
-                <section class="card result-card check-result-column" id="resultCard">
-                    <h2 class="no-border"><span>Result</span></h2>
+                <h2 style="margin-top:12px;"><span>Result</span></h2>
 
-                    <div class="result-item">
-                        <div class="result-label">Player ID</div>
-                        <div class="input-group">
-                            <div class="result-value" id="resultId">-</div>
-                            <button type="button" data-copy="resultId" data-label="Copy ID">Copy ID</button>
-                        </div>
+                <div class="result-item">
+                    <div class="result-label">Player ID</div>
+                    <div class="input-group">
+                        <div class="result-value" id="resultId">-</div>
+                        <button type="button" data-copy="resultId" data-label="Copy ID">Copy ID</button>
                     </div>
+                </div>
 
-                    <div class="result-item" style="margin-top:8px">
-                        <div class="result-label">Username</div>
-                        <div class="input-group">
-                            <div class="result-value" id="resultUsername">-</div>
-                            <button type="button" data-copy="resultUsername" data-label="Copy Username">Copy User</button>
-                        </div>
+                <div class="result-item" style="margin-top:8px">
+                    <div class="result-label">Username</div>
+                    <div class="input-group">
+                        <div class="result-value" id="resultUsername">-</div>
+                        <button type="button" data-copy="resultUsername" data-label="Copy Username">Copy User</button>
                     </div>
+                </div>
 
-                    <div class="result-item" style="margin-top:8px">
+                <div class="row" style="margin-top:8px;">
+                    <div class="form-group compact">
                         <div class="result-label">Status</div>
                         <div class="result-value status-unknown" id="resultStatus">-</div>
                     </div>
-
-                    <div class="result-item" style="margin-top:8px">
+                    <div class="form-group compact">
                         <div class="result-label">Raw Response</div>
                         <div class="result-value" id="resultRaw">-</div>
                     </div>
-                </section>
+                </div>
             </main>
         </div>
     </div>
